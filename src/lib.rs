@@ -1,5 +1,7 @@
+pub mod config;
 mod dto;
 mod entity;
+mod error;
 mod handlers;
 
 use axum::{routing::get, AddExtensionLayer, Router};

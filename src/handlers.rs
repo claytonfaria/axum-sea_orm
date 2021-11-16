@@ -1,46 +1,46 @@
 use crate::{
     dto::{CreateUser, UpdateUser},
     entity::{prelude::Users, users},
+    error::{ApiError, ApiResult, Error},
 };
 
 use axum::{
     extract::{Extension, Path},
     http::StatusCode,
-    response::IntoResponse,
     Json,
 };
 use sea_orm::{ActiveModelTrait, DatabaseConnection, EntityTrait, Set};
+use serde_json::{json, Value};
 
 // basic handler that responds with a static string
-pub async fn get_all_users(Extension(conn): Extension<DatabaseConnection>) -> impl IntoResponse {
-    let users = Users::find().all(&conn).await;
+pub async fn get_all_users(
+    Extension(conn): Extension<DatabaseConnection>,
+) -> Result<(StatusCode, Json<Vec<users::Model>>), ApiError> {
+    let users = Users::find().all(&conn).await.map_err(Error::DbError)?;
 
-    match users {
-        Ok(users) => Ok((StatusCode::OK, Json(users))),
-        Err(err) => return Err((StatusCode::INTERNAL_SERVER_ERROR, err.to_string())),
-    }
+    Ok((StatusCode::OK, Json(users)))
 }
 
 pub async fn get_user(
     Extension(conn): Extension<DatabaseConnection>,
     Path(id): Path<i64>,
     // Explicit specifiying the response types
-) -> Result<(StatusCode, Json<Option<users::Model>>), (StatusCode, String)> {
+) -> ApiResult<(StatusCode, Json<Option<users::Model>>)> {
     let found_user = Users::find_by_id(id)
         .one(&conn)
         .await
-        .map_err(internal_error)?;
+        .map_err(Error::DbError)?;
 
     match found_user {
         Some(user) => Ok((StatusCode::OK, Json(Some(user)))),
-        None => return Err((StatusCode::NOT_FOUND, "user not found".to_string())),
+        None => Err(Error::NotFound)?,
     }
 }
 
 pub async fn create_user(
     Extension(conn): Extension<DatabaseConnection>,
     Json(payload): Json<CreateUser>,
-) -> impl IntoResponse {
+) -> ApiResult<(StatusCode, Json<Option<users::Model>>)> {
     let user = users::ActiveModel {
         first_name: Set(payload.first_name),
         last_name: Set(payload.last_name),
@@ -53,7 +53,7 @@ pub async fn create_user(
     let response = users::Entity::insert(user)
         .exec(&conn)
         .await
-        .map_err(internal_error)?;
+        .map_err(Error::DbError)?;
 
     let inserted_id = response.last_insert_id;
 
@@ -62,86 +62,77 @@ pub async fn create_user(
     let created_user = Users::find_by_id(inserted_id)
         .one(&conn)
         .await
-        .map_err(internal_error)?;
+        .map_err(Error::DbError)?;
 
-    match created_user {
-        Some(user) => Ok((StatusCode::OK, Json(Some(user)))),
-        None => return Err((StatusCode::NOT_FOUND, "user not found".to_string())),
+    if created_user.is_none() {
+        tracing::error!("Failed to create user");
+        return Err(Error::FailedCreateUser)?;
     }
+
+    Ok((StatusCode::CREATED, Json(created_user)))
 }
 
 pub async fn delete_user(
     Extension(conn): Extension<DatabaseConnection>,
     Path(id): Path<i64>,
-) -> impl IntoResponse {
+) -> ApiResult<(StatusCode, Json<Value>)> {
     let response = Users::find_by_id(id)
         .one(&conn)
         .await
-        .map_err(internal_error)?;
+        .map_err(Error::DbError)?;
 
-    match response {
-        Some(user) => {
-            let user: users::ActiveModel = user.into();
-            user.delete(&conn).await.map_err(internal_error)?;
-
-            Ok((StatusCode::OK, "User deleted successfully"))
-        }
-        None => return Err((StatusCode::NOT_FOUND, "user not found".to_string())),
+    if response.is_none() {
+        return Err(Error::NotFound)?;
     }
+
+    let user: users::ActiveModel = response.unwrap().into();
+    user.delete(&conn).await.map_err(Error::DbError)?;
+
+    Ok((StatusCode::OK, Json(json!({ "message": "User deleted" }))))
 }
 
 pub async fn update_user(
     Extension(conn): Extension<DatabaseConnection>,
     Path(id): Path<i64>,
     Json(payload): Json<UpdateUser>,
-) -> impl IntoResponse {
+) -> ApiResult<(StatusCode, Json<Option<users::Model>>)> {
     let response = Users::find_by_id(id)
         .one(&conn)
         .await
-        .map_err(internal_error)?;
+        .map_err(Error::DbError)?;
 
-    match response {
-        Some(user) => {
-            let mut user: users::ActiveModel = user.into();
-
-            if payload.first_name.is_some() {
-                user.first_name = Set(payload.first_name.unwrap());
-            }
-
-            if payload.last_name.is_some() {
-                user.last_name = Set(payload.last_name.unwrap());
-            }
-
-            if payload.email.is_some() {
-                user.email = Set(payload.email);
-            }
-
-            if payload.gender.is_some() {
-                user.gender = Set(payload.gender.unwrap())
-            }
-
-            if payload.age.is_some() {
-                user.age = Set(payload.age);
-            }
-
-            user.update(&conn).await.map_err(internal_error)?;
-
-            let updated_user = Users::find_by_id(id)
-                .one(&conn)
-                .await
-                .map_err(internal_error)?;
-
-            Ok((StatusCode::OK, Json(updated_user)))
-        }
-        None => return Err((StatusCode::NOT_FOUND, "user not found".to_string())),
+    if response.is_none() {
+        return Err(Error::NotFound)?;
     }
-}
 
-/// Utility function for mapping any error into a `500 Internal Server Error`
-/// response.
-fn internal_error<E>(err: E) -> (StatusCode, String)
-where
-    E: std::error::Error,
-{
-    (StatusCode::INTERNAL_SERVER_ERROR, err.to_string())
+    let mut user: users::ActiveModel = response.unwrap().into();
+
+    if payload.first_name.is_some() {
+        user.first_name = Set(payload.first_name.unwrap());
+    }
+
+    if payload.last_name.is_some() {
+        user.last_name = Set(payload.last_name.unwrap());
+    }
+
+    if payload.email.is_some() {
+        user.email = Set(payload.email);
+    }
+
+    if payload.gender.is_some() {
+        user.gender = Set(payload.gender.unwrap())
+    }
+
+    if payload.age.is_some() {
+        user.age = Set(payload.age);
+    }
+
+    user.update(&conn).await.map_err(Error::DbError)?;
+
+    let updated_user = Users::find_by_id(id)
+        .one(&conn)
+        .await
+        .map_err(Error::DbError)?;
+
+    Ok((StatusCode::OK, Json(updated_user)))
 }

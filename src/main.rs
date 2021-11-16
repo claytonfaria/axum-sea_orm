@@ -1,9 +1,11 @@
+mod config;
 mod entity;
 
-use axum_sea_orm::app;
-use sea_orm::Database;
+use config::{db::establish_connection_db, shutdown::shutdown_signal};
 
-use std::{env, net::SocketAddr};
+use axum_sea_orm::app;
+
+use std::net::SocketAddr;
 use tracing_subscriber::EnvFilter;
 
 #[tokio::main]
@@ -17,16 +19,14 @@ async fn main() {
         .with_env_filter(EnvFilter::from_default_env())
         .pretty()
         .init();
-    dotenv::dotenv().ok();
-    let db_url = env::var("DATABASE_URL").expect("DATABASE_URL is not set in .env file");
 
-    let conn = Database::connect(db_url)
-        .await
-        .expect("Database connection failed");
+    let conn = establish_connection_db().await;
 
     let addr = SocketAddr::from(([127, 0, 0, 1], 3000));
     tracing::debug!("listening on {}", addr);
-    let server = axum::Server::bind(&addr).serve(app(conn).into_make_service());
+    let server = axum::Server::bind(&addr)
+        .serve(app(conn).into_make_service())
+        .with_graceful_shutdown(shutdown_signal());
 
     if let Err(err) = server.await {
         tracing::error!("server error: {:?}", err);

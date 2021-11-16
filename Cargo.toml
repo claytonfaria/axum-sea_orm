@@ -19,3 +19,4 @@ sea-orm = { version = "^0", features = [
   "macros",
 ], default-features = false }
 dotenv = "0.15"
+thiserror = "1.0.30"
