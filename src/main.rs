@@ -1,9 +1,10 @@
 mod config;
 mod entity;
 
+use axum::handler::Handler;
 use config::{db::establish_connection_db, shutdown::shutdown_signal};
 
-use axum_sea_orm::app;
+use axum_sea_orm::{app, handlers::handler_404};
 
 use std::net::SocketAddr;
 use tracing_subscriber::EnvFilter;
@@ -12,7 +13,7 @@ use tracing_subscriber::EnvFilter;
 async fn main() {
     // Set the RUST_LOG, if it hasn't been explicitly defined
     if std::env::var_os("RUST_LOG").is_none() {
-        std::env::set_var("RUST_LOG", "axum_sea_orm=debug,tower_http=trace")
+        std::env::set_var("RUST_LOG", "axum_sea_orm=debug,tower_http=debug")
     }
 
     tracing_subscriber::fmt()
@@ -24,8 +25,11 @@ async fn main() {
 
     let addr = SocketAddr::from(([127, 0, 0, 1], 3000));
     tracing::debug!("listening on {}", addr);
+
+    let app = app(conn).fallback(handler_404.into_service());
+
     let server = axum::Server::bind(&addr)
-        .serve(app(conn).into_make_service())
+        .serve(app.into_make_service())
         .with_graceful_shutdown(shutdown_signal());
 
     if let Err(err) = server.await {

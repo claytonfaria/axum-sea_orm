@@ -7,6 +7,7 @@ use crate::{
 use axum::{
     extract::{Extension, Path},
     http::StatusCode,
+    response::IntoResponse,
     Json,
 };
 use sea_orm::{ActiveModelTrait, DatabaseConnection, EntityTrait, Set};
@@ -135,4 +136,9 @@ pub async fn update_user(
         .map_err(Error::DbError)?;
 
     Ok((StatusCode::OK, Json(updated_user)))
+}
+
+pub async fn handler_404() -> impl IntoResponse {
+    tracing::info!("404");
+    (StatusCode::NOT_FOUND, "Not available")
 }
