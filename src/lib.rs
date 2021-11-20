@@ -1,40 +1,36 @@
+mod auth;
 pub mod config;
-mod dto;
 mod entity;
 mod error;
-pub mod handlers;
+mod users;
+
+#[macro_use]
+extern crate lazy_static;
 
 use std::time::Duration;
 
+use auth::handlers::auth_routes;
 use axum::{
-    error_handling::HandleErrorLayer, http::StatusCode, routing::get, AddExtensionLayer, BoxError,
-    Router,
+    error_handling::HandleErrorLayer, http::StatusCode, response::IntoResponse, AddExtensionLayer,
+    BoxError, Router,
 };
 use sea_orm::DatabaseConnection;
 
-use tower_http::{auth::RequireAuthorizationLayer, trace::TraceLayer};
+use tower_http::trace::TraceLayer;
 
 use tower::ServiceBuilder;
+use users::handlers::user_routes;
 
 pub fn app(conn: DatabaseConnection) -> Router {
     let middleware_stack = ServiceBuilder::new()
         .layer(HandleErrorLayer::new(handle_error))
         .timeout(Duration::from_secs(10))
         .layer(TraceLayer::new_for_http())
-        .layer(AddExtensionLayer::new(conn))
-        .layer(RequireAuthorizationLayer::bearer("passwordlol"));
+        .layer(AddExtensionLayer::new(conn));
 
     Router::new()
-        .route(
-            "/users",
-            get(handlers::get_all_users).post(handlers::create_user),
-        )
-        .route(
-            "/users/:id",
-            get(handlers::get_user)
-                .delete(handlers::delete_user)
-                .put(handlers::update_user),
-        )
+        .nest("/users", user_routes())
+        .nest("/auth", auth_routes())
         .layer(middleware_stack)
 }
 fn handle_error(err: BoxError) -> (StatusCode, String) {
@@ -49,4 +45,8 @@ fn handle_error(err: BoxError) -> (StatusCode, String) {
             format!("Unhandled internal error: {}", err),
         )
     }
+}
+pub async fn handler_404() -> impl IntoResponse {
+    tracing::info!("404");
+    (StatusCode::NOT_FOUND, "Not available")
 }

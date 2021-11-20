@@ -13,6 +13,10 @@ pub enum Error {
     NotFound,
     #[error("failed to create user")]
     FailedCreateUser,
+    #[error(transparent)]
+    JwtError(#[from] jsonwebtoken::errors::Error),
+    #[error("wrong credentials")]
+    WrongCredentials,
     // #[error("email is already taken")]
     // DuplicateUserEmail,
     // #[error("name is already taken")]
@@ -21,12 +25,10 @@ pub enum Error {
 
 pub type ApiError = (StatusCode, Json<Value>);
 
-pub type ApiResult<T> = std::result::Result<T, ApiError>;
-
 impl From<Error> for ApiError {
     fn from(err: Error) -> Self {
         let status = match err {
-            // Error::WrongCredentials => StatusCode::UNAUTHORIZED,
+            Error::WrongCredentials => StatusCode::UNAUTHORIZED,
             // Error::ValidationError(_) => StatusCode::BAD_REQUEST,
             Error::NotFound => StatusCode::NOT_FOUND,
             _ => StatusCode::INTERNAL_SERVER_ERROR,

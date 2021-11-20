@@ -4,7 +4,7 @@ mod entity;
 use axum::handler::Handler;
 use config::{db::establish_connection_db, shutdown::shutdown_signal};
 
-use axum_sea_orm::{app, handlers::handler_404};
+use axum_sea_orm::{app, handler_404};
 
 use std::net::SocketAddr;
 use tracing_subscriber::EnvFilter;

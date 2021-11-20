@@ -1,20 +1,32 @@
 use crate::{
-    dto::{CreateUser, UpdateUser},
     entity::{prelude::Users, users},
-    error::{ApiError, ApiResult, Error},
+    error::{ApiError, Error},
 };
 
 use axum::{
     extract::{Extension, Path},
     http::StatusCode,
-    response::IntoResponse,
-    Json,
+    routing::get,
+    Json, Router,
 };
 use sea_orm::{ActiveModelTrait, DatabaseConnection, EntityTrait, Set};
 use serde_json::{json, Value};
+use tower::ServiceBuilder;
+use tower_http::auth::RequireAuthorizationLayer;
 
-// basic handler that responds with a static string
-pub async fn get_all_users(
+use super::dto::{CreateUser, UpdateUser};
+
+pub fn user_routes() -> Router {
+    let middleware_stack =
+        ServiceBuilder::new().layer(RequireAuthorizationLayer::bearer("passwordlol"));
+
+    Router::new()
+        .route("/", get(get_all_users).post(create_user))
+        .route("/:id", get(get_user).delete(delete_user).put(update_user))
+        .layer(middleware_stack)
+}
+
+async fn get_all_users(
     Extension(conn): Extension<DatabaseConnection>,
 ) -> Result<(StatusCode, Json<Vec<users::Model>>), ApiError> {
     let users = Users::find().all(&conn).await.map_err(Error::DbError)?;
@@ -22,11 +34,11 @@ pub async fn get_all_users(
     Ok((StatusCode::OK, Json(users)))
 }
 
-pub async fn get_user(
+async fn get_user(
     Extension(conn): Extension<DatabaseConnection>,
     Path(id): Path<i64>,
     // Explicit specifiying the response types
-) -> ApiResult<(StatusCode, Json<Option<users::Model>>)> {
+) -> Result<(StatusCode, Json<Option<users::Model>>), ApiError> {
     let found_user = Users::find_by_id(id)
         .one(&conn)
         .await
@@ -38,10 +50,10 @@ pub async fn get_user(
     }
 }
 
-pub async fn create_user(
+async fn create_user(
     Extension(conn): Extension<DatabaseConnection>,
     Json(payload): Json<CreateUser>,
-) -> ApiResult<(StatusCode, Json<Option<users::Model>>)> {
+) -> Result<(StatusCode, Json<Option<users::Model>>), ApiError> {
     let user = users::ActiveModel {
         first_name: Set(payload.first_name),
         last_name: Set(payload.last_name),
@@ -73,10 +85,10 @@ pub async fn create_user(
     Ok((StatusCode::CREATED, Json(created_user)))
 }
 
-pub async fn delete_user(
+async fn delete_user(
     Extension(conn): Extension<DatabaseConnection>,
     Path(id): Path<i64>,
-) -> ApiResult<(StatusCode, Json<Value>)> {
+) -> Result<(StatusCode, Json<Value>), ApiError> {
     let response = Users::find_by_id(id)
         .one(&conn)
         .await
@@ -92,11 +104,11 @@ pub async fn delete_user(
     Ok((StatusCode::OK, Json(json!({ "message": "User deleted" }))))
 }
 
-pub async fn update_user(
+async fn update_user(
     Extension(conn): Extension<DatabaseConnection>,
     Path(id): Path<i64>,
     Json(payload): Json<UpdateUser>,
-) -> ApiResult<(StatusCode, Json<Option<users::Model>>)> {
+) -> Result<(StatusCode, Json<Option<users::Model>>), ApiError> {
     let response = Users::find_by_id(id)
         .one(&conn)
         .await
@@ -136,9 +148,4 @@ pub async fn update_user(
         .map_err(Error::DbError)?;
 
     Ok((StatusCode::OK, Json(updated_user)))
-}
-
-pub async fn handler_404() -> impl IntoResponse {
-    tracing::info!("404");
-    (StatusCode::NOT_FOUND, "Not available")
 }
