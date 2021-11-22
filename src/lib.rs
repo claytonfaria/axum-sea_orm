@@ -10,6 +10,7 @@ extern crate lazy_static;
 use std::time::Duration;
 
 use auth::handlers::auth_routes;
+
 use axum::{
     error_handling::HandleErrorLayer, http::StatusCode, response::IntoResponse, AddExtensionLayer,
     BoxError, Router,
@@ -18,11 +19,23 @@ use sea_orm::DatabaseConnection;
 
 use tower_http::trace::TraceLayer;
 
+use tower_http::cors::CorsLayer;
+
 use tower::ServiceBuilder;
 use users::handlers::user_routes;
 
 pub fn app(conn: DatabaseConnection) -> Router {
+    // let cors = CorsLayer::new()
+    // .allow_origin(Origin::exact("http://localhost:3000".parse().unwrap()))
+    // .allow_credentials(true)
+    // .allow_headers(any())
+    // .allow_methods(any())
+    // .max_age(Duration::from_secs(3600));
+
+    let cors = CorsLayer::permissive();
+
     let middleware_stack = ServiceBuilder::new()
+        .layer(cors)
         .layer(HandleErrorLayer::new(handle_error))
         .timeout(Duration::from_secs(10))
         .layer(TraceLayer::new_for_http())

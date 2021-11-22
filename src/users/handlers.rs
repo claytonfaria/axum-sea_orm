@@ -1,4 +1,5 @@
 use crate::{
+    auth::jwt::Claims,
     entity::{prelude::Users, users},
     error::{ApiError, Error},
 };
@@ -11,24 +12,20 @@ use axum::{
 };
 use sea_orm::{ActiveModelTrait, DatabaseConnection, EntityTrait, Set};
 use serde_json::{json, Value};
-use tower::ServiceBuilder;
-use tower_http::auth::RequireAuthorizationLayer;
 
 use super::dto::{CreateUser, UpdateUser};
 
 pub fn user_routes() -> Router {
-    let middleware_stack =
-        ServiceBuilder::new().layer(RequireAuthorizationLayer::bearer("passwordlol"));
-
     Router::new()
         .route("/", get(get_all_users).post(create_user))
         .route("/:id", get(get_user).delete(delete_user).put(update_user))
-        .layer(middleware_stack)
 }
 
 async fn get_all_users(
     Extension(conn): Extension<DatabaseConnection>,
+    authenticated_user: Claims,
 ) -> Result<(StatusCode, Json<Vec<users::Model>>), ApiError> {
+    dbg!(&authenticated_user);
     let users = Users::find().all(&conn).await.map_err(Error::DbError)?;
 
     Ok((StatusCode::OK, Json(users)))

@@ -23,7 +23,7 @@ async fn main() {
 
     let conn = establish_connection_db().await;
 
-    let addr = SocketAddr::from(([127, 0, 0, 1], 3000));
+    let addr = SocketAddr::from(([127, 0, 0, 1], 4000));
     tracing::debug!("listening on {}", addr);
 
     let app = app(conn).fallback(handler_404.into_service());
