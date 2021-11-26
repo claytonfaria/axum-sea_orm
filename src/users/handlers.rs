@@ -5,12 +5,13 @@ use crate::{
 };
 
 use axum::{
-    extract::{Extension, Path},
+    extract::{Extension, Path, Query},
     http::StatusCode,
     routing::get,
     Json, Router,
 };
 use sea_orm::{ActiveModelTrait, DatabaseConnection, EntityTrait, Set};
+use serde::Deserialize;
 use serde_json::{json, Value};
 
 use super::dto::{CreateUser, UpdateUser};
@@ -21,10 +22,28 @@ pub fn user_routes() -> Router {
         .route("/:id", get(get_user).delete(delete_user).put(update_user))
 }
 
+#[derive(Deserialize, Debug)]
+struct Pagination {
+    page: usize,
+    per_page: usize,
+}
+
+impl Default for Pagination {
+    fn default() -> Self {
+        Self {
+            page: 1,
+            per_page: 30,
+        }
+    }
+}
+
 async fn get_all_users(
     Extension(conn): Extension<DatabaseConnection>,
     authenticated_user: Claims,
+    pagination: Option<Query<Pagination>>,
 ) -> Result<(StatusCode, Json<Vec<users::Model>>), ApiError> {
+    let Query(pagination) = pagination.unwrap_or_default();
+    dbg!(&pagination);
     dbg!(&authenticated_user);
     let users = Users::find().all(&conn).await.map_err(Error::DbError)?;
 
