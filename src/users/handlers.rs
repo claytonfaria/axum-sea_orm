@@ -43,7 +43,8 @@ async fn get_all_users(
     pagination: Option<Query<Pagination>>,
 ) -> Result<(StatusCode, Json<Vec<users::Model>>), ApiError> {
     let Query(pagination) = pagination.unwrap_or_default();
-    dbg!(&pagination);
+    dbg!(&pagination.page);
+    dbg!(&pagination.per_page);
     dbg!(&authenticated_user);
     let users = Users::find().all(&conn).await.map_err(Error::DbError)?;
 

@@ -46,7 +46,7 @@ pub fn app(conn: DatabaseConnection) -> Router {
         .nest("/auth", auth_routes())
         .layer(middleware_stack)
 }
-fn handle_error(err: BoxError) -> (StatusCode, String) {
+async fn handle_error(err: BoxError) -> impl IntoResponse {
     if err.is::<tower::timeout::error::Elapsed>() {
         (
             StatusCode::REQUEST_TIMEOUT,

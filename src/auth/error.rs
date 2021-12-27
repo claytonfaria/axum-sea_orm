@@ -1,9 +1,6 @@
-use std::convert::Infallible;
-
 use axum::{
-    body::{Bytes, Full},
-    http::{Response, StatusCode},
-    response::IntoResponse,
+    http::StatusCode,
+    response::{IntoResponse, Response},
     Json,
 };
 use serde_json::json;
@@ -18,10 +15,7 @@ pub enum AuthError {
 }
 
 impl IntoResponse for AuthError {
-    type Body = Full<Bytes>;
-    type BodyError = Infallible;
-
-    fn into_response(self) -> Response<Self::Body> {
+    fn into_response(self) -> Response {
         let (status, error_message) = match self {
             AuthError::WrongCredentials => (StatusCode::UNAUTHORIZED, "Wrong credentials"),
             AuthError::MissingCredentials => (StatusCode::BAD_REQUEST, "Missing credentials"),
