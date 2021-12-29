@@ -1,26 +1,27 @@
-#[cfg(unix)]
-pub async fn shutdown_signal() {
-    use std::io;
-    use tokio::signal::unix::SignalKind;
+use tokio::signal;
 
-    async fn terminate() -> io::Result<()> {
-        tokio::signal::unix::signal(SignalKind::terminate())?
+pub async fn shutdown_signal() {
+    let ctrl_c = async {
+        signal::ctrl_c()
+            .await
+            .expect("failed to install Ctrl+C handler");
+    };
+
+    #[cfg(unix)]
+    let terminate = async {
+        signal::unix::signal(signal::unix::SignalKind::terminate())
+            .expect("failed to install signal handler")
             .recv()
             .await;
-        Ok(())
-    }
+    };
+
+    #[cfg(not(unix))]
+    let terminate = std::future::pending::<()>();
 
     tokio::select! {
-        _ = terminate() => {},
-        _ = tokio::signal::ctrl_c() => {},
+        _ = ctrl_c => {},
+        _ = terminate => {},
     }
-    println!("signal received, starting graceful shutdown")
-}
 
-#[cfg(windows)]
-pub async fn shutdown_signal() {
-    tokio::signal::ctrl_c()
-        .await
-        .expect("faild to install CTRL+C handler");
-    println!("signal received, starting graceful shutdown")
+    println!("signal received, starting graceful shutdown");
 }
